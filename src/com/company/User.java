@@ -10,12 +10,10 @@ public class User {
 
     private int id;
     private ArrayList<Integer> followers;
-    private ArrayList<Integer> followings;
 
     public User(int id) {
         this.id = id;
         this.followers = new ArrayList<Integer>();
-        this.followings = new ArrayList<Integer>();
     }
 
     public ArrayList<Integer> getFollowers() {
