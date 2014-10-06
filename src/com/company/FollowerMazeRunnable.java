@@ -11,30 +11,36 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class FollowerMazeRunnable implements Runnable{
     private HashMap<Integer, BufferedWriter> userWriterMap;
     private ConcurrentLinkedQueue<String> messageQueue;
+    private volatile boolean stop;
 
     public FollowerMazeRunnable(ConcurrentLinkedQueue<String> messageQueue, HashMap<Integer,
             BufferedWriter> userWriterMap) {
         this.messageQueue = messageQueue;
         this.userWriterMap = userWriterMap;
+        this.stop = false;
+    }
+
+    public void stopRunning() {
+        stop = true;
     }
 
     public void run() {
         try {
-            while (true) {
+            while (!this.stop) {
                 String instructionMessage = messageQueue.poll();
                 if (instructionMessage != null) {
                     String parsedMessage[] = instructionMessage.split("\\|");
                     int showMessageToUserId = Integer.parseInt(parsedMessage[0]);
                     String message = instructionMessage.substring(instructionMessage.indexOf("|") + 1);
-                    System.out.println(message);
+                    //System.out.println(message);
                     userWriterMap.get(showMessageToUserId).write(message);
                     userWriterMap.get(showMessageToUserId).write("\n");
                     userWriterMap.get(showMessageToUserId).flush();
                 }
             }
         } catch (IOException e) {
-            System.out.println("Can't write to the user clients");
-            System.out.println(e.getMessage());
+            System.err.println("Can't write to the user clients");
+            System.err.println(e.getMessage());
             System.exit(-1);
         }
     }

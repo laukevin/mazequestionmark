@@ -19,6 +19,8 @@ public class FollowerMazeServer{
     private Queue<String> bufferedMessages;
     private int lastValidMessage;
     private Set<Integer> connectedUsers;
+    private HashMap<Integer, BufferedWriter> userClientWriterMap;
+    private final int TIMEOUT = 1000;
 
     public FollowerMazeServer(int sourcePort, int userPort) {
         this.sourcePort = sourcePort;
@@ -40,38 +42,47 @@ public class FollowerMazeServer{
                         return 0;
                     }
                 });
+        this.userClientWriterMap = new HashMap<Integer, BufferedWriter>();
         this.lastValidMessage = 1;
+    }
+
+    private void setupUserConnections() {
+        //setting up the user connections
+        try {
+            ServerSocket userClientServerSocket = new ServerSocket(this.userPort);
+            userClientServerSocket.setSoTimeout(TIMEOUT);
+
+            while (true) {
+                Socket userClientSocket = userClientServerSocket.accept();
+                BufferedReader userClientIn = new BufferedReader(
+                        new InputStreamReader(userClientSocket.getInputStream()));
+                int userClientNum = Integer.parseInt(userClientIn.readLine().trim());
+                BufferedWriter userClientOut = new BufferedWriter(
+                        new OutputStreamWriter(userClientSocket.getOutputStream()));
+                this.userClientWriterMap.put(userClientNum, userClientOut);
+                userGraph.put(userClientNum, new User(userClientNum));
+                connectedUsers.add(userClientNum);
+            }
+        } catch (SocketTimeoutException s) {
+        } catch (IOException e) {
+            System.err.println("IOException for user socket");
+            System.err.println(e.getMessage());
+            System.exit(-1);
+        }
     }
 
     public void start() {
         try {
-            HashMap<Integer, BufferedWriter> userClientWriterMap = new HashMap<Integer, BufferedWriter>();
             ServerSocket eventSourceServerSocket = new ServerSocket(this.sourcePort);
             Socket eventSourceSocket = eventSourceServerSocket.accept();
             BufferedReader eventSourceIn = new BufferedReader(
                     new InputStreamReader(eventSourceSocket.getInputStream()));
 
-            //setting up the user connections
-            try {
-                ServerSocket userClientServerSocket = new ServerSocket(this.userPort);
-                userClientServerSocket.setSoTimeout(1000);
-
-                while (true) {
-                    Socket userClientSocket = userClientServerSocket.accept();
-                    BufferedReader userClientIn = new BufferedReader(
-                            new InputStreamReader(userClientSocket.getInputStream()));
-                    int userClientNum = Integer.parseInt(userClientIn.readLine().trim());
-                    BufferedWriter userClientOut = new BufferedWriter(
-                            new OutputStreamWriter(userClientSocket.getOutputStream()));
-                    userClientWriterMap.put(userClientNum, userClientOut);
-                    userGraph.put(userClientNum, new User(userClientNum));
-                    connectedUsers.add(userClientNum);
-                }
-            } catch (SocketTimeoutException s) {
-            }
+            setupUserConnections();
 
             //Starts the worker, that pulls stuff off the queue and writes them.
-            FollowerMazeRunnable worker = new FollowerMazeRunnable(messagesToBeProcessedByWorker, userClientWriterMap);
+            FollowerMazeRunnable worker = new FollowerMazeRunnable(this.messagesToBeProcessedByWorker,
+                    this.userClientWriterMap);
             Thread workerThread = new Thread(worker);
             workerThread.start();
 
@@ -80,27 +91,33 @@ public class FollowerMazeServer{
             while ((input = eventSourceIn.readLine()) != null) {
                 processRawMessage(input);
             }
+
+            worker.stopRunning();
+            eventSourceIn.close();
+            for (BufferedWriter w: this.userClientWriterMap.values()) {
+                w.close();
+            }
+
         } catch (IOException e) {
-            System.out.println("IOException for event source socket");
-            System.out.println(e.getMessage());
+            System.err.println(e.getMessage());
             System.exit(-1);
         }
     }
 
-    public void addToMessagesToBeProcessed(int showUser, String message) {
+    private void addToMessagesToBeProcessed(int showUser, String message) {
         if (!connectedUsers.contains(showUser)) {
             return;
         }
         String toBeProcessedMessage = Integer.toString(showUser) + "|" + message;
-        messagesToBeProcessedByWorker.add(toBeProcessedMessage);
+        this.messagesToBeProcessedByWorker.add(toBeProcessedMessage);
     }
 
-    public void processRawMessage (String message) {
+    private void processRawMessage (String message) {
         bufferedMessages.add(message);
         processBufferedMessages();
     }
 
-    public void processBufferedMessages() {
+    private void processBufferedMessages() {
         String currentMessage = bufferedMessages.peek();
         int messageId = Integer.parseInt(currentMessage.substring(0, currentMessage.indexOf("|")));
         while (messageId == lastValidMessage) {
@@ -115,7 +132,7 @@ public class FollowerMazeServer{
         }
     }
 
-    public void processCurrentMessage(String message) {
+    private void processCurrentMessage(String message) {
         String strippedMessage = message.substring(message.indexOf("|") + 1);
         String messageType = strippedMessage.substring(0,1);
         if (messageType.equals("F")) {
@@ -131,7 +148,7 @@ public class FollowerMazeServer{
         }
     }
 
-    public void followMessage(String message) {
+    private void followMessage(String message) {
         String parseMessage[] = message.split("\\|");
         int fromUserId = Integer.parseInt(parseMessage[2]);
         int toUserId = Integer.parseInt(parseMessage[3]);
@@ -145,7 +162,7 @@ public class FollowerMazeServer{
         addToMessagesToBeProcessed(toUserId, message);
     }
 
-    public void unfollowMessage(String message) {
+    private void unfollowMessage(String message) {
         String parseMessage[] = message.split("\\|");
         int fromUserId = Integer.parseInt(parseMessage[2]);
         int toUserId = Integer.parseInt(parseMessage[3]);
@@ -158,19 +175,19 @@ public class FollowerMazeServer{
         userGraph.get(toUserId).unFollower(fromUserId);
     }
 
-    public void broadcastMessage(String message) {
+    private void broadcastMessage(String message) {
         for (int userId : connectedUsers) {
             addToMessagesToBeProcessed(userId, message);
         }
     }
 
-    public void privateMessage(String message) {
+    private void privateMessage(String message) {
         String parseMessage[] = message.split("\\|");
         String toUserId = parseMessage[3];
         addToMessagesToBeProcessed(Integer.parseInt(toUserId), message);
     }
 
-    public void statusUpdateMessage(String message) {
+    private void statusUpdateMessage(String message) {
         String parseMessage[] = message.split("\\|");
         int fromUserId = Integer.parseInt(parseMessage[2]);
         if (!userGraph.containsKey(fromUserId)) {

@@ -9,15 +9,15 @@ import java.util.*;
 public class User {
 
     private int id;
-    private ArrayList<Integer> followers;
+    private HashSet<Integer> followers;
 
     public User(int id) {
         this.id = id;
-        this.followers = new ArrayList<Integer>();
+        this.followers = new HashSet<Integer>();
     }
 
     public ArrayList<Integer> getFollowers() {
-        return this.followers;
+        return new ArrayList<Integer>(followers);
     }
 
     public void addFollower(Integer follower) {
