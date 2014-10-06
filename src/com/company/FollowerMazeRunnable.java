@@ -32,7 +32,6 @@ public class FollowerMazeRunnable implements Runnable{
                     String parsedMessage[] = instructionMessage.split("\\|");
                     int showMessageToUserId = Integer.parseInt(parsedMessage[0]);
                     String message = instructionMessage.substring(instructionMessage.indexOf("|") + 1);
-                    //System.out.println(message);
                     userWriterMap.get(showMessageToUserId).write(message);
                     userWriterMap.get(showMessageToUserId).write("\n");
                     userWriterMap.get(showMessageToUserId).flush();
